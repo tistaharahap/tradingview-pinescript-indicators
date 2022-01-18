@@ -1,0 +1,66 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Batista Harahap <batista@bango29.com>
+
+//@version=4
+study("Bayesian Probabilities", shorttitle="BayesProbabilities")
+
+// AO
+ao = sma(hl2, 5) - sma(hl2, 34)
+emaAo528 = ema(ao, 528)
+
+// OBV
+obv = cum(sign(change(close)) * volume)
+obvMa = sma(obv, 100)
+
+// MFI
+mfiPeriod = input(14, "MFI Period", minval=1)
+mfiVals = mfi(hlc3, mfiPeriod)
+
+// Moving Averages
+ema247 = ema(close, 247)
+ema528 = ema(close, 528)
+vwma528 = vwma(close, 528)
+
+// Bayesian Theorem Starts
+bayesPeriod = input(528, title="Bayesian Lookback Period")
+
+// Prices are breaking up
+probObvPriceUpSeq = obv < obvMa ? 1 : 0
+probObvPriceUp = sum(probObvPriceUpSeq, bayesPeriod) / bayesPeriod
+probAoPriceUpSeq = ao > emaAo528 ? 1 : 0
+probAoPriceUp = sum(probAoPriceUpSeq, bayesPeriod) / bayesPeriod
+probEma247PriceUpSeq = close > ema247 ? 1 : 0
+probEma247PriceUp = sum(probEma247PriceUpSeq, bayesPeriod) / bayesPeriod
+probEma528PriceUpSeq = close > ema528 ? 1 : 0
+probEma528PriceUp = sum(probEma528PriceUpSeq, bayesPeriod) / bayesPeriod
+probVwma528PriceUpSeq = close > vwma528 ? 1 : 0
+probVwma528PriceUp = sum(probVwma528PriceUpSeq, bayesPeriod) / bayesPeriod
+
+// Prices are breaking down
+probObvPriceDownSeq = obv > obvMa ? 1 : 0
+probObvPriceDown = sum(probObvPriceDownSeq, bayesPeriod) / bayesPeriod
+probAoPriceDownSeq = ao < emaAo528 ? 1 : 0
+probAoPriceDown = sum(probAoPriceDownSeq, bayesPeriod) / bayesPeriod
+probEma247PriceDownSeq = close < ema247 ? 1 : 0
+probEma247PriceDown = sum(probEma247PriceDownSeq, bayesPeriod) / bayesPeriod
+probEma528PriceDownSeq = close < ema528 ? 1 : 0
+probEma528PriceDown = sum(probEma528PriceDownSeq, bayesPeriod) / bayesPeriod
+probVwma528PriceDownSeq = close < vwma528 ? 1 : 0
+probVwma528PriceDown = sum(probVwma528PriceDownSeq, bayesPeriod) / bayesPeriod
+
+// Sigma Probs
+sigmaProbsUp = nz(probObvPriceUp * probAoPriceUp * probEma247PriceUp * probEma528PriceUp * probVwma528PriceUp / (probObvPriceUp * probAoPriceUp * probEma247PriceUp * probEma528PriceUp * probVwma528PriceUp + ( (1 - probObvPriceUp) * ( 1 - probAoPriceUp) * (1 - probEma247PriceUp) * (1 - probEma528PriceUp) * (1 - probVwma528PriceUp) ) ))
+sigmaProbsDown = nz(probObvPriceDown * probAoPriceDown * probEma247PriceDown * probEma528PriceDown * probVwma528PriceDown / (probObvPriceDown * probAoPriceDown * probEma247PriceDown * probEma528PriceDown * probVwma528PriceDown + ( (1 - probObvPriceDown) * ( 1 - probAoPriceDown) * (1 - probEma247PriceDown) * (1 - probEma528PriceDown) * (1 - probVwma528PriceDown) ) ))
+
+probDiff = sigmaProbsUp - sigmaProbsDown
+absProbDiff = abs(probDiff) * 100
+showProb = input(true, title="Show probabilities?")
+plot(showProb ? absProbDiff : na, color=probDiff > 0 ? color.green : color.red, transp=30)
+
+plotMFI = input(true, title="Plot MFI?")
+plot(plotMFI ? mfiVals : na, title="MFI", linewidth=1, color=color.white, transp=50)
+
+hzl80 = hline(80, color=#ffffff66, linestyle=hline.style_dashed)
+hzl50 = hline(50, color=#ffffff66, linestyle=hline.style_dashed)
+hzl20 = hline(20, color=#ffffff66, linestyle=hline.style_dashed)
+
