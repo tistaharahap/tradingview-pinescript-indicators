@@ -1,0 +1,434 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © LonesomeTheBlue
+//
+//@version=4
+study("Divergence for many indicator v3", shorttitle="Divergences", overlay=true, max_bars_back = 4000)
+lb = input(5, title="Left Bars", minval=1)
+rb = input(5, title="Right Bars", minval=1)
+showhidden = input(false, title = "Show Hidden Divergences")
+chcut = input(false, title = "Check Cut-Through in indicators !")
+shownum = input(true, title="Show Divergence Number")
+showindis = input(true, title="Show Indicator Names")
+showpivot = input(false, title="Show Pivot Points")
+chwidth = input(true, title = "Change Width by Number of Divergence")
+showlimit = input(1, title="Minimum Number of Divergence", minval = 1, maxval = 11)
+calcmacd = input(false, title="MACD")
+calcmacda = input(false, title="MACD Histogram")
+calcrsi = input(false, title="RSI")
+calcstoc = input(false, title="Stochastic")
+calccci = input(false, title="CCI")
+calcmom = input(false, title="Momentum")
+calcobv = input(false, title="OBV")
+calcdi = input(false, title="Diosc")
+calcvwmacd = input(false, title="VWmacd")
+calccmf = input(false, title="Chaikin Money Flow")
+calcmfi = input(false, title="Money Flow Index")
+calcao = input(false, title="Awesome Oscillator")
+calcvip = input(false, title="Vortex +")
+calcaohl2 = input(false, title="AOHL2")
+calcoi = input(true, title="Open Interest")
+
+// RSI
+rsi = rsi(close, 14)
+// MACD
+[macd, signal, deltamacd] = macd(close, 12, 26, 9)
+// Momentum
+moment = mom(close, 10)
+// CCI
+cci = cci(close, 10)
+// OBV
+
+Obv = obv // cum(change(close) > 0 ? volume : change(close) < 0 ? -volume : 0 * volume)
+// Stoch
+stk = sma(stoch(close, high, low, 14), 3)
+// DIOSC
+DI = change(high) - (-change(low))
+trur = rma(tr, 14)
+diosc = fixnan(100 * rma(DI, 14) / trur)
+// volume weighted macd
+maFast = vwma(close, 12)
+maSlow = vwma(close, 26)
+vwmacd = maFast - maSlow
+// Chaikin money flow
+Cmfm = ((close-low) - (high-close)) / (high - low)
+Cmfv = Cmfm * volume
+cmf = sma(Cmfv, 21) / sma(volume,21)
+// Moneyt Flow Index
+Mfi = mfi(close, 14)
+// AO
+ao = sma(hl2,5) - sma(hl2,34)
+// Vortex
+period_ = 14
+VMP = sum( abs( high - low[1]), period_ )
+VMM = sum( abs( low - high[1]), period_ )
+STR = sum( atr(1), period_ )
+vip = VMP / STR
+// AOHL2
+pivotMaFast = ema(hl2, 23)
+pivotMaSlow = ema(hl2, 528)
+aohl2 = pivotMaFast - pivotMaSlow
+//OI
+string openInterestTicker = str.format("{0}_OI", syminfo.ticker)
+string timeframe = syminfo.type == "futures" and timeframe.isintraday ? "1D" : timeframe.period
+[oiOpen, oiHigh, oiLow, oiClose, oiColorCond] = security(openInterestTicker, timeframe, [open, high, low, close, close > close[1]], ignore_invalid_symbol = true)
+oiOpen := oiOpen ? oiOpen : na
+oiHigh := oiHigh ? oiHigh : na
+oiLow := oiLow ? oiLow : na
+
+float top = na
+float bot = na
+top := pivothigh(lb, rb)
+bot := pivotlow(lb, rb)
+
+plotshape(top and showpivot, text="[PH]",  style=shape.labeldown, color=color.white, textcolor=color.black, location=location.abovebar, transp=0, offset = -rb)
+plotshape(bot and showpivot, text="[PL]",  style=shape.labeldown, color=color.white, textcolor=color.black, location=location.belowbar, transp=0, offset = -rb)
+
+topc = 0, botc = 0
+topc := top ? lb : nz(topc[1]) + 1
+botc := bot ? lb : nz(botc[1]) + 1
+
+// Negative Divergence or Hidden Positive  Divergence
+newtop = pivothigh(lb, 0) // check only left side
+emptyh = true
+if not na(newtop) and ((newtop > high[topc] and not showhidden) or (newtop < high[topc] and showhidden))  // there must not close price higher than the line between last PH and current high
+    diff = (newtop - high[topc]) / topc
+    hline = newtop - diff                   // virtual line to check there is no close price higher than it
+    for x = 1 to topc -1
+        if close[x] > hline
+            emptyh := false
+            break
+        hline := hline - diff
+else
+    emptyh := false
+
+// check cut-through in indicators
+nocut1(indi, len)=>
+    _ret = true
+    diff = (indi - nz(indi[len])) / len
+    ln = indi - diff
+    for x = 1 to len -1
+        if nz(indi[x]) > ln
+            _ret := false
+            break
+        ln := ln - diff
+    _ret
+
+rsiok = nocut1(rsi, topc)
+macdok = nocut1(macd, topc)
+deltamacdok = nocut1(deltamacd, topc)
+momentok = nocut1(moment, topc)
+cciok = nocut1(cci, topc)
+obvok = nocut1(obv, topc)
+stkok = nocut1(stk, topc)
+dioscok = nocut1(diosc, topc)
+vwmacdok = nocut1(vwmacd, topc)
+cmfok = nocut1(cmf, topc)
+mfiok = nocut1(Mfi, topc)
+aook = nocut1(ao, topc)
+vipok = nocut1(vip, topc)
+aohl2ok = nocut1(aohl2, topc)
+oiok = nocut1(oiClose, topc)
+
+negdivergence = 0
+negdivtxt = ""
+if emptyh and not na(newtop) and not showhidden
+    if calcrsi and rsi[topc] > rsi and (not chcut or rsiok)
+        negdivergence := negdivergence + 1
+        negdivtxt := "RSI\n"
+    if calcmacd and macd[topc] > macd and (not chcut or macdok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "MACD\n"
+    if calcmacda and deltamacd[topc] > deltamacd and (not chcut or deltamacdok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "MACD Hist\n"
+    if calcmom and moment[topc] > moment and (not chcut or momentok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "Momentum\n"
+    if calccci and cci[topc] > cci and (not chcut or cciok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "CCI\n"
+    if calcobv and Obv[topc] > Obv and (not chcut or obvok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "OBV\n"
+    if calcstoc and stk[topc] > stk and (not chcut or stkok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "Stoch\n"
+    if calcdi and diosc[topc] > diosc and (not chcut or dioscok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "Diosc\n"
+    if calcvwmacd and vwmacd[topc] > vwmacd and (not chcut or vwmacdok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "VWMacd\n"
+    if calccmf and cmf[topc] > cmf  and (not chcut or cmfok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "CMF\n"
+    if calcmfi and Mfi[topc] > Mfi  and (not chcut or mfiok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "MFI\n"
+    if calcao and ao[topc] > ao and (not chcut or aook)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "AO\n"
+    if calcvip and vip[topc] > vip and (not chcut or vipok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "VIP\n"
+    if calcaohl2 and aohl2[topc] > aohl2 and (not chcut or aohl2ok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "AOHL2\n"
+    if calcoi and oiClose[topc] > oiClose and (not chcut or oiok)
+        negdivergence := negdivergence + 1
+        negdivtxt := negdivtxt + "OI\n"
+
+// Hidden divergence
+hposdivergence = 0
+hposdivtxt = ""
+if emptyh and not na(newtop) and showhidden
+    if calcrsi and rsi[topc] < rsi and (not chcut or rsiok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := "RSI\n"
+    if calcmacd and macd[topc] < macd and (not chcut or macdok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "MACD\n"
+    if calcmacda and deltamacd[topc] < deltamacd and (not chcut or deltamacdok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "MACD Hist\n"
+    if calcmom and moment[topc] < moment and (not chcut or momentok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "Momentum\n"
+    if calccci and cci[topc] < cci and (not chcut or cciok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "CCI\n"
+    if calcobv and Obv[topc] < Obv and (not chcut or obvok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "OBV\n"
+    if calcstoc and stk[topc] < stk and (not chcut or stkok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "Stoch\n"
+    if calcdi and diosc[topc] < diosc and (not chcut or dioscok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "Diosc\n"
+    if calcvwmacd and vwmacd[topc] < vwmacd and (not chcut or vwmacdok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "VWMacd\n"
+    if calccmf and cmf[topc] < cmf and (not chcut or cmfok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "CMF\n"
+    if calcmfi and Mfi[topc] < Mfi  and (not chcut or mfiok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "MFI\n"
+    if calcao and ao[topc] < ao and (not chcut or aook)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "AO\n"
+    if calcvip and vip[topc] < vip and (not chcut or vipok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "VIP\n"
+    if calcaohl2 and aohl2[topc] < aohl2 and (not chcut or aohl2ok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "AOHL2\n"
+    if calcoi and oiClose[topc] < oiClose and (not chcut or oiok)
+        hposdivergence := hposdivergence + 1
+        hposdivtxt := hposdivtxt + "OI\n"
+
+newareah = false
+newareah := top ? false : nz(newareah[1], false)
+if negdivergence >= showlimit or hposdivergence >= showlimit
+    var line divlh = na
+    var label labh = na
+    if newareah                             // we remove old line until It reaches new pivot point (like animation ;)
+        line.delete(divlh)
+        label.delete(labh)
+    newwd = not showhidden ?
+       (not chwidth ? 2 :
+       negdivergence <= 2 ? 2 :
+       negdivergence <= 5 ? 3 :
+       negdivergence <= 8 ? 4 : 5) :
+       (not chwidth ? 2 :
+       hposdivergence <= 2 ? 2 :
+       hposdivergence <= 5 ? 3 :
+       hposdivergence <= 8 ? 4 : 5)
+       
+    divlh := line.new(bar_index - topc, high[topc], bar_index, high, color = color.red, width = newwd)
+    if shownum or showindis
+        txt = showindis ? showhidden ? hposdivtxt : negdivtxt : ""
+        txt := txt + (shownum ? showhidden ? tostring(hposdivergence) : tostring(negdivergence) : "")
+        labh := label.new(bar_index, na, text=txt, color= showhidden ? color.lime : color.red, textcolor = showhidden ? color.black : color.white, style= showhidden ? label.style_labelup : label.style_labeldown, yloc=yloc.abovebar)
+    newareah := true 
+
+// Positive or Hidden Negative Divergence
+newbot = pivotlow(lb, 0) // check only left side
+emptyl = true
+if not na(newbot) and ((newbot < low[botc] and not showhidden) or   (newbot > low[botc] and showhidden))  // there must not close price lower than the line between last PL and current low
+    diff = (newbot - low[botc]) / botc
+    lline = newbot - diff                   // virtual line to check there is no close price lower than it
+    for x = 1 to botc -1
+        if close[x] < lline
+            emptyl := false
+            break
+        lline := lline - diff
+else
+    emptyl := false
+
+// check cut-through in indicators
+nocut2(indi, len)=>
+    _ret = true
+    diff = (indi - nz(indi[len])) / len
+    ln = indi - diff
+    for x = 1 to len -1
+        if nz(indi[x]) < ln
+            _ret := false
+            break
+        ln := ln - diff
+    _ret
+
+rsiok := nocut2(rsi, botc)
+macdok := nocut2(macd, botc)
+deltamacdok := nocut2(deltamacd, botc)
+momentok := nocut2(moment, botc)
+cciok := nocut2(cci, botc)
+obvok := nocut2(obv, botc)
+stkok := nocut2(stk, botc)
+dioscok := nocut2(diosc, botc)
+vwmacdok := nocut2(vwmacd, botc)
+cmfok := nocut2(cmf, botc)
+mfiok := nocut2(Mfi, botc)
+aook := nocut2(ao, botc)
+vipok := nocut2(vip, botc)
+aohl2ok := nocut2(aohl2, botc)
+oiok := nocut2(oiClose, botc)
+
+posdivergence = 0
+posdivtxt = ""
+if emptyl and not na(newbot) and not showhidden
+    if calcrsi and rsi[botc] < rsi and (not chcut or rsiok)
+        posdivergence := 1
+        posdivtxt := "RSI\n"
+    if calcmacd and macd[botc] < macd  and (not chcut or macdok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "MACD\n"
+    if calcmacda and deltamacd[botc] < deltamacd and (not chcut or deltamacdok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "MACD Hist\n"
+    if calcmom and moment[botc] < moment and (not chcut or momentok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "Momentum\n"
+    if calccci and cci[botc] < cci and (not chcut or cciok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "CCI\n"
+    if calcobv and Obv[botc] < Obv and (not chcut or obvok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "OBV\n"
+    if calcstoc and stk[botc] < stk and (not chcut or stkok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "Stoch\n"
+    if calcdi and diosc[botc] < diosc and (not chcut or dioscok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "Diosc\n"
+    if calcvwmacd and vwmacd[botc] < vwmacd and (not chcut or vwmacdok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "VWMacd\n"
+    if calccmf and cmf[botc] < cmf and (not chcut or cmfok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "CMF\n"
+    if calcmfi and Mfi[botc] < Mfi and (not chcut or mfiok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "MFI\n"
+    if calcao and ao[botc] < ao and (not chcut or aook)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "AO\n"
+    if calcvip and vip[botc] < vip and (not chcut or aook)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "VIP\n"
+    if calcaohl2 and aohl2[botc] < aohl2 and (not chcut or aohl2ok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "AOHL2\n"
+    if calcoi and oiClose[botc] < oiClose and (not chcut or oiok)
+        posdivergence := posdivergence + 1
+        posdivtxt := posdivtxt + "OI\n"
+
+// Hidden Divergences
+hnegdivergence = 0
+hnegdivtxt = ""
+if emptyl and not na(newbot) and showhidden
+    if calcrsi and rsi[botc] > rsi and (not chcut or rsiok)
+        hnegdivergence := 1
+        hnegdivtxt := "RSI\n"
+    if calcmacd and macd[botc] > macd  and (not chcut or macdok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "MACD\n"
+    if calcmacda and deltamacd[botc] < deltamacd and (not chcut or deltamacdok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "MACD Hist\n"
+    if calcmom and moment[botc] > moment and (not chcut or momentok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "Momentum\n"
+    if calccci and cci[botc] > cci and (not chcut or cciok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "CCI\n"
+    if calcobv and Obv[botc] > Obv and (not chcut or obvok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "OBV\n"
+    if calcstoc and stk[botc] > stk and (not chcut or stkok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "Stoch\n"
+    if calcdi and diosc[botc] > diosc and (not chcut or dioscok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "Diosc\n"
+    if calcvwmacd and vwmacd[botc] > vwmacd and (not chcut or vwmacdok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "VWMacd\n"
+    if calccmf and cmf[botc] > cmf and (not chcut or cmfok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "CMF\n"
+    if calcmfi and Mfi[botc] > Mfi and (not chcut or mfiok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "MFI\n"
+    if calcao and ao[botc] > ao and (not chcut or aook)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "AO\n"
+    if calcvip and vip[botc] > vip and (not chcut or aook)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "VIP\n"
+    if calcaohl2 and aohl2[botc] > aohl2 and (not chcut or aohl2ok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "AOHL2\n"
+    if calcoi and oiClose[botc] > oiClose and (not chcut or oiok)
+        hnegdivergence := hnegdivergence + 1
+        hnegdivtxt := hnegdivtxt + "OI\n"
+
+newareal = false
+newareal := bot ? false : nz(newareal[1], false)
+if posdivergence >= showlimit or hnegdivergence >= showlimit
+    var line divl = na
+    var label lab = na
+    if newareal                             // we remove old line until It reaches new pivot point (like animation ;)
+        line.delete(divl)
+        label.delete(lab)
+    newwd = not showhidden ?
+       (not chwidth ? 2 :
+       posdivergence <= 2 ? 2 :
+       posdivergence <= 5 ? 3 :
+       posdivergence <= 8 ? 4 : 5) :
+       (not chwidth ? 2 :
+       hnegdivergence <= 2 ? 2 :
+       hnegdivergence <= 5 ? 3 :
+       hnegdivergence <= 8 ? 4 : 5)
+       
+    divl := line.new(bar_index - botc, low[botc], bar_index, low, color = color.lime, width = newwd)
+    if shownum or showindis
+        txt = showindis ? showhidden ? hnegdivtxt : posdivtxt : ""
+        txt := txt + (shownum ? showhidden ?  tostring(hnegdivergence) : tostring(posdivergence) : "")
+        lab := label.new(bar_index, na, text=txt, color= showhidden ? color.olive : color.lime, textcolor = showhidden ? color.white : color.black, style = showhidden ? label.style_labeldown : label.style_labelup, yloc=yloc.belowbar)
+    newareal := true
+
+positives = posdivergence >= showlimit and not showhidden
+negatives = negdivergence >= showlimit and not showhidden
+
+longSignal = positives[1] and not positives and low > low[1]
+shortSignal = negatives[1] and not negatives and high < high[1]
+
+alertcondition(longSignal, title="Long Signal", message="Long!")
+alertcondition(shortSignal, title="Short Signal", message="Short!")
+
+alertcondition(posdivergence >= showlimit and not showhidden, title='Positive Divergence', message='Positive Divergence')
+alertcondition(negdivergence >= showlimit and not showhidden, title='Negative Divergence', message='Negative Divergence')
+alertcondition(hposdivergence >= showlimit and showhidden, title='Positive Hidden Divergence', message='Positive Hidden Divergence')
+alertcondition(hnegdivergence >= showlimit and showhidden, title='Negative Hidden Divergence', message='Negative Hidden Divergence')
