@@ -1,0 +1,42 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © turk_shariq
+
+//@version=5
+indicator("Order Flow Imbalance", "Order Imbalance", true, max_lines_count = 500)
+
+// Inputs {
+adboxcount = input.int (55, "Maximum Imb Displayed", 1, group = "Chart Customization")
+boxcolor = input.color(color.new(color.white, 65), "Imbalance Box Color", inline = "customcolor", group = "Chart Customization Box")
+// }
+
+// Box Variables {
+var box[] imbboxarray = array.new_box()
+
+topimbalance = low[2] <= open[1] and high[0] >= close[1]
+topimbalancesize = low[2] - high[0]
+bottomimbalance = high[2] >= open[1] and low[0] <= close[1]
+bottomimbalancesize = low[0] - high[2]
+//}
+
+// Box Calc {
+f_choppedoffimb(imbboxarray) =>
+    if array.size(imbboxarray) > 0
+        for i = array.size(imbboxarray) - 1 to 0 by 1
+            cutbox = array.get(imbboxarray, i)
+            boxhighzone = box.get_top(cutbox)
+            boxlowzone = box.get_bottom(cutbox)
+            boxrightzone = box.get_right(cutbox)
+            if na or bar_index - 1 == boxrightzone and not(high > boxlowzone and low < boxlowzone or high > boxhighzone and low < boxhighzone)
+                box.set_right(array.get(imbboxarray, i), bar_index)
+// }
+
+// Box Draw {
+if topimbalance and topimbalancesize > 0 or bottomimbalance and bottomimbalancesize > 0
+    boxhighzone = topimbalance and topimbalancesize > 0 ? low[2] : low[0]
+    boxlowzone = topimbalance and topimbalancesize > 0 ? high[0] : high[2]
+    imbbox = box.new(bar_index, boxhighzone, bar_index, boxlowzone, boxcolor, border_style = line.style_dashed, bgcolor = boxcolor)
+    if array.size(imbboxarray) > adboxcount
+        box.delete(array.shift(imbboxarray))
+    array.push(imbboxarray, imbbox)
+f_choppedoffimb(imbboxarray)
+// }

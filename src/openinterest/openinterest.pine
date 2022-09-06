@@ -1,0 +1,43 @@
+//@version=5
+indicator("Open Interest + Volume", "OIV", format = format.volume)
+
+bool overwriteSymbolInput = input.bool(false, "Override symbol", inline = "Override symbol")
+string tickerInput = input.symbol("", "", inline = "Override symbol")
+int risingFallingPeriod = input.int(3, "Rising/Falling Period")
+int oiEmaPeriod = input.int(247, "OI EMA Period")
+bool superBullishOnly = input.bool(false, "Super bullish only?")
+
+string symbolOnly = str.substring(tickerInput, str.pos(tickerInput, ":") + 1)
+string userSymbol = overwriteSymbolInput ? symbolOnly : syminfo.prefix + ":" + syminfo.ticker
+string openInterestTicker = str.format("{0}_OI", userSymbol)
+string timeframe = syminfo.type == "futures" and timeframe.isintraday ? "1D" : timeframe.period
+[oiOpen, oiHigh, oiLow, oiClose, oiColorCond] = request.security(openInterestTicker, timeframe, [open, high, low, close, close > close[1]], ignore_invalid_symbol = true)
+oiOpen := oiOpen ? oiOpen : na
+oiHigh := oiHigh ? oiHigh : na
+oiLow := oiLow ? oiLow : na
+
+oiCloseEma = ta.ema(oiClose, oiEmaPeriod)
+
+if barstate.islastconfirmedhistory and na(oiClose)
+    runtime.error(str.format("No Open Interest data found for the `{0}` symbol.", userSymbol))
+
+if barstate.isfirst
+    var table symbolTable = table.new(position.bottom_left, 1, 1, bgcolor = color.new(color.gray, 0))
+    table.cell(symbolTable, 0, 0, text = userSymbol + " open interest data: " + openInterestTicker, text_color = color.white, text_size = size.small)
+
+hasOHLC = ta.cum(oiOpen)
+color openInterestColor = oiColorCond ? color.teal : color.red
+plot(hasOHLC ? na : oiClose, "Futures Open Interest", openInterestColor, style = plot.style_stepline)
+plot(oiCloseEma, title="OI EMA", color=color.yellow)
+plotcandle(oiOpen, oiHigh, oiLow, hasOHLC ? oiClose : na, "Crypto Open Interest", color = openInterestColor, wickcolor = openInterestColor, bordercolor = openInterestColor)
+
+volEma = ta.ema(volume, oiEmaPeriod)
+
+bool greenCandles = close > open
+
+bool isBullish1 = ta.rising(close, risingFallingPeriod) and ta.rising(volume, risingFallingPeriod) and ta.rising(oiClose, risingFallingPeriod) and volume > volEma and greenCandles
+bool isBullish2 = oiClose[2] < oiCloseEma[2] and oiClose[1] > oiCloseEma[1] and oiClose > oiCloseEma and oiClose > oiOpen and volume > volEma and greenCandles
+barcolor(superBullishOnly ? (isBullish2 ? color.white : na) : (isBullish1 or isBullish2 ? color.white : na))
+
+alertcondition(isBullish1 or isBullish2, title="Bullish Alert")
+
