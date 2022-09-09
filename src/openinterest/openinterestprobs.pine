@@ -1,0 +1,50 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © tista
+
+//@version=5
+indicator("Open Interest Probabilities", "OIB", format = format.price)
+
+bool overwriteSymbolInput = input.bool(false, "Override symbol", inline = "Override symbol")
+string tickerInput = input.symbol("", "", inline = "Override symbol")
+int oiEmaPeriod = input.int(88, "OI EMA Period")
+
+string symbolOnly = str.substring(tickerInput, str.pos(tickerInput, ":") + 1)
+string userSymbol = overwriteSymbolInput ? symbolOnly : syminfo.prefix + ":" + syminfo.ticker
+string openInterestTicker = str.format("{0}_OI", userSymbol)
+string timeframe = syminfo.type == "futures" and timeframe.isintraday ? "1D" : timeframe.period
+[oiOpen, oiHigh, oiLow, oiClose, oiColorCond] = request.security(openInterestTicker, timeframe, [open, high, low, close, close > close[1]], ignore_invalid_symbol = true)
+oiOpen := oiOpen ? oiOpen : na
+oiHigh := oiHigh ? oiHigh : na
+oiLow := oiLow ? oiLow : na
+
+oiRed = oiClose < oiOpen
+oiGreen = oiClose > oiOpen
+oiCloseEma = ta.ema(oiClose, oiEmaPeriod)
+
+volumeEma = ta.ema(volume, oiEmaPeriod)
+redCandle = close < open
+
+// Bayesian Theorem Starts
+bayesPeriod = input(88, title="Bayesian Lookback Period")
+
+// OI Red
+probOIRedSeq = oiRed and oiClose > oiCloseEma ? 1 : 0
+probOIRed = math.sum(probOIRedSeq, bayesPeriod) / bayesPeriod
+probVolumeOverEmaSeq = volume > volumeEma ? 1 : 0
+probVolumeOverEma = math.sum(probVolumeOverEmaSeq, bayesPeriod) / bayesPeriod
+probRedCandleSeq = redCandle ? 1 : 0
+probRedCandle = math.sum(probRedCandleSeq, bayesPeriod) / bayesPeriod
+
+
+// Sigma Probs
+sigmaProbs = 1 - nz(probOIRed * probVolumeOverEma * probRedCandle / (probOIRed * probVolumeOverEma * probRedCandle + ( ( 1 - probOIRed) * (1 - probVolumeOverEma) * (1 - probRedCandle) ) ))
+
+probDiff = 1 - sigmaProbs
+absProbDiff = probDiff * 100
+showProb = input(true, title="Show probabilities?")
+probThreshold = input(90.0, title="Probability Threshold")
+plot(showProb ? absProbDiff : na, color=absProbDiff >= probThreshold ? color.red : color.white, transp=30)
+
+hzl80 = hline(90, color=#ffffff66, linestyle=hline.style_dashed)
+hzl50 = hline(50, color=#ffffff66, linestyle=hline.style_dashed)
+
