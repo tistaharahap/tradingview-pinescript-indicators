@@ -6,7 +6,7 @@ indicator("Open Interest Probabilities", "OIB", format = format.price)
 
 bool overwriteSymbolInput = input.bool(false, "Override symbol", inline = "Override symbol")
 string tickerInput = input.symbol("", "", inline = "Override symbol")
-int oiEmaPeriod = input.int(88, "OI EMA Period")
+int oiEmaPeriod = input.int(247, "OI EMA Period")
 
 string symbolOnly = str.substring(tickerInput, str.pos(tickerInput, ":") + 1)
 string userSymbol = overwriteSymbolInput ? symbolOnly : syminfo.prefix + ":" + syminfo.ticker
@@ -23,9 +23,10 @@ oiCloseEma = ta.ema(oiClose, oiEmaPeriod)
 
 volumeEma = ta.ema(volume, oiEmaPeriod)
 redCandle = close < open
+greenCandle = close > open
 
 // Bayesian Theorem Starts
-bayesPeriod = input(88, title="Bayesian Lookback Period")
+bayesPeriod = input(13, title="Bayesian Lookback Period")
 
 // OI Red
 probOIRedSeq = oiRed and oiClose > oiCloseEma ? 1 : 0
@@ -35,15 +36,28 @@ probVolumeOverEma = math.sum(probVolumeOverEmaSeq, bayesPeriod) / bayesPeriod
 probRedCandleSeq = redCandle ? 1 : 0
 probRedCandle = math.sum(probRedCandleSeq, bayesPeriod) / bayesPeriod
 
+// OI Green
+probOIGreenSeq = oiGreen and oiClose < oiCloseEma ? 1 : 0
+probOIGreen = math.sum(probOIGreenSeq, bayesPeriod) / bayesPeriod
+probGreenCandleSeq = greenCandle ? 1 : 0
+probGreenCandle = math.sum(probGreenCandleSeq, bayesPeriod) / bayesPeriod
+
 
 // Sigma Probs
-sigmaProbs = 1 - nz(probOIRed * probVolumeOverEma * probRedCandle / (probOIRed * probVolumeOverEma * probRedCandle + ( ( 1 - probOIRed) * (1 - probVolumeOverEma) * (1 - probRedCandle) ) ))
+sigmaProbsBearish = 1 - nz(probOIRed * probVolumeOverEma * probRedCandle / (probOIRed * probVolumeOverEma * probRedCandle + ( ( 1 - probOIRed) * (1 - probVolumeOverEma) * (1 - probRedCandle) ) ))
+sigmaProbsBullish = 1 - nz(probOIGreen * probVolumeOverEma * probGreenCandle / (probOIGreen * probVolumeOverEma * probGreenCandle + ( ( 1 - probOIGreen) * (1 - probVolumeOverEma) * (1 - probGreenCandle) ) ))
 
-probDiff = 1 - sigmaProbs
-absProbDiff = probDiff * 100
-showProb = input(true, title="Show probabilities?")
+showProbBearish = input(true, title="Show Bearish Probabilities?")
+showProbBullish = input(true, title="Show Bullish Probabilities?")
 probThreshold = input(90.0, title="Probability Threshold")
-plot(showProb ? absProbDiff : na, color=absProbDiff >= probThreshold ? color.red : color.white, transp=30)
+
+probDiffBearish = 1 - sigmaProbsBearish
+absProbDiffBearish = probDiffBearish * 100
+plot(showProbBearish ? absProbDiffBearish : na, color=absProbDiffBearish >= probThreshold or ta.falling(close, 5) ? color.new(color.red, 0) : color.new(color.red, 70))
+
+probDiffBullish = 1 - sigmaProbsBullish
+absProbDiffBullish = probDiffBullish * 100
+plot(showProbBullish ? absProbDiffBullish : na, color=absProbDiffBullish >= probThreshold or ta.rising(close, 5) ? color.new(color.green, 0) : color.new(color.green, 70))
 
 hzl80 = hline(90, color=#ffffff66, linestyle=hline.style_dashed)
 hzl50 = hline(50, color=#ffffff66, linestyle=hline.style_dashed)
