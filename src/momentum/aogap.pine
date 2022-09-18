@@ -1,0 +1,19 @@
+//@version=4
+study(title="Awesome Oscillator Gap", shorttitle="AOGap", resolution="", overlay=false)
+
+emaPeriod = input(247, title="AO EMA Period")
+
+ao = sma(hl2,5) - sma(hl2,34)
+emaAo528 = ema(ao, emaPeriod)
+
+btcd = security("BTC.D", timeframe.period, close)
+btcd247 = ema(btcd, 247)
+btcd528 = ema(btcd, 528)
+dominanceDown = falling(btcd, 2) and btcd < btcd247 and btcd < btcd528
+dominanceUp = rising(btcd, 2)
+
+pvLeft = 2
+pvRight = 2
+
+plot(ao, color=ao > ao[1] ? color.green : color.red)
+plot(emaAo528, color=color.yellow, transp=50)
