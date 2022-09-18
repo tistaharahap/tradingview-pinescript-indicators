@@ -3,9 +3,7 @@ indicator("Open Interest + Volume", "OIV", format = format.volume)
 
 bool overwriteSymbolInput = input.bool(false, "Override symbol", inline = "Override symbol")
 string tickerInput = input.symbol("", "", inline = "Override symbol")
-int risingFallingPeriod = input.int(3, "Rising/Falling Period")
 int oiEmaPeriod = input.int(247, "OI EMA Period")
-bool superBullishOnly = input.bool(false, "Super bullish only?")
 
 string symbolOnly = str.substring(tickerInput, str.pos(tickerInput, ":") + 1)
 string userSymbol = overwriteSymbolInput ? symbolOnly : syminfo.prefix + ":" + syminfo.ticker
@@ -18,26 +16,38 @@ oiLow := oiLow ? oiLow : na
 
 oiCloseEma = ta.ema(oiClose, oiEmaPeriod)
 
-if barstate.islastconfirmedhistory and na(oiClose)
-    runtime.error(str.format("No Open Interest data found for the `{0}` symbol.", userSymbol))
-
-if barstate.isfirst
-    var table symbolTable = table.new(position.bottom_left, 1, 1, bgcolor = color.new(color.gray, 0))
-    table.cell(symbolTable, 0, 0, text = userSymbol + " open interest data: " + openInterestTicker, text_color = color.white, text_size = size.small)
-
 hasOHLC = ta.cum(oiOpen)
-color openInterestColor = oiColorCond ? color.teal : color.red
+straightFiveGreens = oiColorCond and oiColorCond[1] and oiColorCond[2] and oiColorCond[3] and oiColorCond[4]
+straightFiveReds = not oiColorCond and not oiColorCond[1] and not oiColorCond[2] and not oiColorCond[3] and not oiColorCond[4]
+markedCandle = straightFiveGreens or straightFiveReds
+color openInterestColor = markedCandle ? straightFiveGreens ? color.white : color.yellow : oiColorCond ? color.teal : color.red
 plot(hasOHLC ? na : oiClose, "Futures Open Interest", openInterestColor, style = plot.style_stepline)
 plot(oiCloseEma, title="OI EMA", color=color.yellow)
 plotcandle(oiOpen, oiHigh, oiLow, hasOHLC ? oiClose : na, "Crypto Open Interest", color = openInterestColor, wickcolor = openInterestColor, bordercolor = openInterestColor)
 
-volEma = ta.ema(volume, oiEmaPeriod)
+oiRatio = oiClose / oiCloseEma - 1
+oiRatioThreshold = input.float(10.0, title="OI Ratio Threshold %")
 
-bool greenCandles = close > open
+// AO
+aoEmaPeriod = input(8, title="AO EMA Period")
 
-bool isBullish1 = ta.rising(close, risingFallingPeriod) and ta.rising(volume, risingFallingPeriod) and ta.rising(oiClose, risingFallingPeriod) and volume > volEma and greenCandles
-bool isBullish2 = oiClose[2] < oiCloseEma[2] and oiClose[1] > oiCloseEma[1] and oiClose > oiCloseEma and oiClose > oiOpen and volume > volEma and greenCandles
-barcolor(superBullishOnly ? (isBullish2 ? color.white : na) : (isBullish1 or isBullish2 ? color.white : na))
+ao = ta.sma(hl2, 5) - ta.sma(hl2, 34)
+emaAo = ta.ema(ao, aoEmaPeriod)
+aoCrossUp = ta.crossover(ao, emaAo)
+aoCrossDown = ta.crossunder(ao, emaAo)
 
-alertcondition(isBullish1 or isBullish2, title="Bullish Alert")
+// Candle Action
+actionPeriod = input.int(3, title="Candle Action Lookback Period")
+actionPercentage = input.float(3.0, title="Candle Action Percentage Threshold")
 
+// Short
+pumpLookbackPeriod = input.int(8, title="Pump Lookback Period")
+hasPumped = oiRatio > oiRatioThreshold / 100.0 and ((close / close[actionPeriod] - 1.0) * 100.0 >= actionPercentage)
+pumpIsAlive(lookback) =>
+    for i = 1 to lookback
+        if hasPumped[i]
+            true
+
+shortNow = pumpIsAlive(pumpLookbackPeriod) and aoCrossDown
+barcolor(shortNow ? color.yellow : na)
+bgcolor(shortNow ? color.new(color.red, 50) : na)
